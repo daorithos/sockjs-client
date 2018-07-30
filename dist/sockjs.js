@@ -1,4 +1,4 @@
-/* sockjs-client v1.1.5 | http://sockjs.org | MIT license */
+/* sockjs-client v1.1.6 | http://sockjs.org | MIT license */
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.SockJS = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 (function (global){
 'use strict';
@@ -348,12 +348,12 @@ if (process.env.NODE_ENV !== 'production') {
   debug = require('debug')('sockjs-client:info-ajax');
 }
 
-function InfoAjax(url, AjaxObject) {
+function InfoAjax(url, AjaxObject, sockJsOptions) {
   EventEmitter.call(this);
 
   var self = this;
   var t0 = +new Date();
-  this.xo = new AjaxObject('GET', url);
+  this.xo = new AjaxObject('GET', url, null, sockJsOptions);
 
   this.xo.once('finish', function(status, text) {
     var info, rtt;
@@ -501,87 +501,88 @@ module.exports = InfoIframe;
 'use strict';
 
 var EventEmitter = require('events').EventEmitter
-  , inherits = require('inherits')
-  , urlUtils = require('./utils/url')
-  , XDR = require('./transport/sender/xdr')
-  , XHRCors = require('./transport/sender/xhr-cors')
-  , XHRLocal = require('./transport/sender/xhr-local')
-  , XHRFake = require('./transport/sender/xhr-fake')
-  , InfoIframe = require('./info-iframe')
-  , InfoAjax = require('./info-ajax')
-  ;
+    , inherits = require('inherits')
+    , urlUtils = require('./utils/url')
+    , XDR = require('./transport/sender/xdr')
+    , XHRCors = require('./transport/sender/xhr-cors')
+    , XHRLocal = require('./transport/sender/xhr-local')
+    , XHRFake = require('./transport/sender/xhr-fake')
+    , InfoIframe = require('./info-iframe')
+    , InfoAjax = require('./info-ajax')
+;
 
-var debug = function() {};
+var debug = function () {
+};
 if (process.env.NODE_ENV !== 'production') {
-  debug = require('debug')('sockjs-client:info-receiver');
+    debug = require('debug')('sockjs-client:info-receiver');
 }
 
-function InfoReceiver(baseUrl, urlInfo) {
-  debug(baseUrl);
-  var self = this;
-  EventEmitter.call(this);
+function InfoReceiver(baseUrl, urlInfo, sockJsOptions) {
+    debug(baseUrl);
+    var self = this;
+    EventEmitter.call(this);
 
-  setTimeout(function() {
-    self.doXhr(baseUrl, urlInfo);
-  }, 0);
+    setTimeout(function () {
+        self.doXhr(baseUrl, urlInfo, sockJsOptions);
+    }, 0);
 }
 
 inherits(InfoReceiver, EventEmitter);
 
 // TODO this is currently ignoring the list of available transports and the whitelist
 
-InfoReceiver._getReceiver = function(baseUrl, url, urlInfo) {
-  // determine method of CORS support (if needed)
-  if (urlInfo.sameOrigin) {
-    return new InfoAjax(url, XHRLocal);
-  }
-  if (XHRCors.enabled) {
-    return new InfoAjax(url, XHRCors);
-  }
-  if (XDR.enabled && urlInfo.sameScheme) {
-    return new InfoAjax(url, XDR);
-  }
-  if (InfoIframe.enabled()) {
-    return new InfoIframe(baseUrl, url);
-  }
-  return new InfoAjax(url, XHRFake);
+InfoReceiver._getReceiver = function (baseUrl, url, urlInfo, sockJsOptions) {
+    // determine method of CORS support (if needed)
+    if (urlInfo.sameOrigin) {
+        return new InfoAjax(url, XHRLocal, sockJsOptions);
+    }
+    if (XHRCors.enabled) {
+        return new InfoAjax(url, XHRCors, sockJsOptions);
+    }
+    if (XDR.enabled && urlInfo.sameScheme) {
+        return new InfoAjax(url, XDR, sockJsOptions);
+    }
+    if (InfoIframe.enabled()) {
+        return new InfoIframe(baseUrl, url);
+    }
+    return new InfoAjax(url, XHRFake, sockJsOptions);
 };
 
-InfoReceiver.prototype.doXhr = function(baseUrl, urlInfo) {
-  var self = this
-    , url = urlUtils.addPath(baseUrl, '/info')
+InfoReceiver.prototype.doXhr = function (baseUrl, urlInfo, sockJsOptions) {
+    var self = this
+        , url = urlUtils.addPath(baseUrl, '/info')
     ;
-  debug('doXhr', url);
+    debug('doXhr', url);
 
-  this.xo = InfoReceiver._getReceiver(baseUrl, url, urlInfo);
+    this.xo = InfoReceiver._getReceiver(baseUrl, url, urlInfo, sockJsOptions);
 
-  this.timeoutRef = setTimeout(function() {
-    debug('timeout');
-    self._cleanup(false);
-    self.emit('finish');
-  }, InfoReceiver.timeout);
+    this.timeoutRef = setTimeout(function () {
+        debug('timeout');
+        self._cleanup(false);
+        self.emit('finish');
+    }, InfoReceiver.timeout);
 
-  this.xo.once('finish', function(info, rtt) {
-    debug('finish', info, rtt);
-    self._cleanup(true);
-    self.emit('finish', info, rtt);
-  });
+    this.xo.once('finish', function (info, rtt) {
+        debug('finish', info, rtt);
+        self._cleanup(true);
+        self.emit('finish', info, rtt);
+    });
 };
 
-InfoReceiver.prototype._cleanup = function(wasClean) {
-  debug('_cleanup');
-  clearTimeout(this.timeoutRef);
-  this.timeoutRef = null;
-  if (!wasClean && this.xo) {
-    this.xo.close();
-  }
-  this.xo = null;
+InfoReceiver.prototype._cleanup = function (wasClean) {
+    debug('_cleanup');
+    clearTimeout(this.timeoutRef);
+    this.timeoutRef = null;
+    if (!wasClean && this.xo) {
+        this.xo.close();
+    }
+    this.xo = null;
 };
 
-InfoReceiver.prototype.close = function() {
-  debug('close');
-  this.removeAllListeners();
-  this._cleanup(false);
+InfoReceiver.prototype.close = function () {
+    debug('close');
+    this.removeAllListeners();
+    this._cleanup(false);
 };
 
 InfoReceiver.timeout = 8000;
@@ -612,164 +613,165 @@ module.exports = global.location || {
 require('./shims');
 
 var URL = require('url-parse')
-  , inherits = require('inherits')
-  , JSON3 = require('json3')
-  , random = require('./utils/random')
-  , escape = require('./utils/escape')
-  , urlUtils = require('./utils/url')
-  , eventUtils = require('./utils/event')
-  , transport = require('./utils/transport')
-  , objectUtils = require('./utils/object')
-  , browser = require('./utils/browser')
-  , log = require('./utils/log')
-  , Event = require('./event/event')
-  , EventTarget = require('./event/eventtarget')
-  , loc = require('./location')
-  , CloseEvent = require('./event/close')
-  , TransportMessageEvent = require('./event/trans-message')
-  , InfoReceiver = require('./info-receiver')
-  ;
+    , inherits = require('inherits')
+    , JSON3 = require('json3')
+    , random = require('./utils/random')
+    , escape = require('./utils/escape')
+    , urlUtils = require('./utils/url')
+    , eventUtils = require('./utils/event')
+    , transport = require('./utils/transport')
+    , objectUtils = require('./utils/object')
+    , browser = require('./utils/browser')
+    , log = require('./utils/log')
+    , Event = require('./event/event')
+    , EventTarget = require('./event/eventtarget')
+    , loc = require('./location')
+    , CloseEvent = require('./event/close')
+    , TransportMessageEvent = require('./event/trans-message')
+    , InfoReceiver = require('./info-receiver')
+;
 
-var debug = function() {};
+var debug = function () {
+};
 if (process.env.NODE_ENV !== 'production') {
-  debug = require('debug')('sockjs-client:main');
+    debug = require('debug')('sockjs-client:main');
 }
 
 var transports;
 
 // follow constructor steps defined at http://dev.w3.org/html5/websockets/#the-websocket-interface
 function SockJS(url, protocols, options) {
-  if (!(this instanceof SockJS)) {
-    return new SockJS(url, protocols, options);
-  }
-  if (arguments.length < 1) {
-    throw new TypeError("Failed to construct 'SockJS: 1 argument required, but only 0 present");
-  }
-  EventTarget.call(this);
+    if (!(this instanceof SockJS)) {
+        return new SockJS(url, protocols, options);
+    }
+    if (arguments.length < 1) {
+        throw new TypeError("Failed to construct 'SockJS: 1 argument required, but only 0 present");
+    }
+    EventTarget.call(this);
 
-  this.readyState = SockJS.CONNECTING;
-  this.extensions = '';
-  this.protocol = '';
+    this.readyState = SockJS.CONNECTING;
+    this.extensions = '';
+    this.protocol = '';
 
-  // non-standard extension
-  options = options || {};
-  if (options.protocols_whitelist) {
-    log.warn("'protocols_whitelist' is DEPRECATED. Use 'transports' instead.");
-  }
-  this._transportsWhitelist = options.transports;
-  this._transportOptions = options.transportOptions || {};
+    // non-standard extension
+    options = options || {};
+    if (options.protocols_whitelist) {
+        log.warn("'protocols_whitelist' is DEPRECATED. Use 'transports' instead.");
+    }
+    this._transportsWhitelist = options.transports;
+    this._transportOptions = options.transportOptions || {};
 
-  var sessionId = options.sessionId || 8;
-  if (typeof sessionId === 'function') {
-    this._generateSessionId = sessionId;
-  } else if (typeof sessionId === 'number') {
-    this._generateSessionId = function() {
-      return random.string(sessionId);
+    var sessionId = options.sessionId || 8;
+    if (typeof sessionId === 'function') {
+        this._generateSessionId = sessionId;
+    } else if (typeof sessionId === 'number') {
+        this._generateSessionId = function () {
+            return random.string(sessionId);
+        };
+    } else {
+        throw new TypeError('If sessionId is used in the options, it needs to be a number or a function.');
+    }
+
+    this._server = options.server || random.numberString(1000);
+
+    // Step 1 of WS spec - parse and validate the url. Issue #8
+    var parsedUrl = new URL(url);
+    if (!parsedUrl.host || !parsedUrl.protocol) {
+        throw new SyntaxError("The URL '" + url + "' is invalid");
+    } else if (parsedUrl.hash) {
+        throw new SyntaxError('The URL must not contain a fragment');
+    } else if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new SyntaxError("The URL's scheme must be either 'http:' or 'https:'. '" + parsedUrl.protocol + "' is not allowed.");
+    }
+
+    var secure = parsedUrl.protocol === 'https:';
+    // Step 2 - don't allow secure origin with an insecure protocol
+    if (loc.protocol === 'https:' && !secure) {
+        throw new Error('SecurityError: An insecure SockJS connection may not be initiated from a page loaded over HTTPS');
+    }
+
+    // Step 3 - check port access - no need here
+    // Step 4 - parse protocols argument
+    if (!protocols) {
+        protocols = [];
+    } else if (!Array.isArray(protocols)) {
+        protocols = [protocols];
+    }
+
+    // Step 5 - check protocols argument
+    var sortedProtocols = protocols.sort();
+    sortedProtocols.forEach(function (proto, i) {
+        if (!proto) {
+            throw new SyntaxError("The protocols entry '" + proto + "' is invalid.");
+        }
+        if (i < (sortedProtocols.length - 1) && proto === sortedProtocols[i + 1]) {
+            throw new SyntaxError("The protocols entry '" + proto + "' is duplicated.");
+        }
+    });
+
+    // Step 6 - convert origin
+    var o = urlUtils.getOrigin(loc.href);
+    this._origin = o ? o.toLowerCase() : null;
+
+    // remove the trailing slash
+    parsedUrl.set('pathname', parsedUrl.pathname.replace(/\/+$/, ''));
+
+    // store the sanitized url
+    this.url = parsedUrl.href;
+    debug('using url', this.url);
+
+    // Step 7 - start connection in background
+    // obtain server info
+    // http://sockjs.github.io/sockjs-protocol/sockjs-protocol-0.3.3.html#section-26
+    this._urlInfo = {
+        nullOrigin: !browser.hasDomain()
+        , sameOrigin: urlUtils.isOriginEqual(this.url, loc.href)
+        , sameScheme: urlUtils.isSchemeEqual(this.url, loc.href)
     };
-  } else {
-    throw new TypeError('If sessionId is used in the options, it needs to be a number or a function.');
-  }
 
-  this._server = options.server || random.numberString(1000);
-
-  // Step 1 of WS spec - parse and validate the url. Issue #8
-  var parsedUrl = new URL(url);
-  if (!parsedUrl.host || !parsedUrl.protocol) {
-    throw new SyntaxError("The URL '" + url + "' is invalid");
-  } else if (parsedUrl.hash) {
-    throw new SyntaxError('The URL must not contain a fragment');
-  } else if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    throw new SyntaxError("The URL's scheme must be either 'http:' or 'https:'. '" + parsedUrl.protocol + "' is not allowed.");
-  }
-
-  var secure = parsedUrl.protocol === 'https:';
-  // Step 2 - don't allow secure origin with an insecure protocol
-  if (loc.protocol === 'https:' && !secure) {
-    throw new Error('SecurityError: An insecure SockJS connection may not be initiated from a page loaded over HTTPS');
-  }
-
-  // Step 3 - check port access - no need here
-  // Step 4 - parse protocols argument
-  if (!protocols) {
-    protocols = [];
-  } else if (!Array.isArray(protocols)) {
-    protocols = [protocols];
-  }
-
-  // Step 5 - check protocols argument
-  var sortedProtocols = protocols.sort();
-  sortedProtocols.forEach(function(proto, i) {
-    if (!proto) {
-      throw new SyntaxError("The protocols entry '" + proto + "' is invalid.");
-    }
-    if (i < (sortedProtocols.length - 1) && proto === sortedProtocols[i + 1]) {
-      throw new SyntaxError("The protocols entry '" + proto + "' is duplicated.");
-    }
-  });
-
-  // Step 6 - convert origin
-  var o = urlUtils.getOrigin(loc.href);
-  this._origin = o ? o.toLowerCase() : null;
-
-  // remove the trailing slash
-  parsedUrl.set('pathname', parsedUrl.pathname.replace(/\/+$/, ''));
-
-  // store the sanitized url
-  this.url = parsedUrl.href;
-  debug('using url', this.url);
-
-  // Step 7 - start connection in background
-  // obtain server info
-  // http://sockjs.github.io/sockjs-protocol/sockjs-protocol-0.3.3.html#section-26
-  this._urlInfo = {
-    nullOrigin: !browser.hasDomain()
-  , sameOrigin: urlUtils.isOriginEqual(this.url, loc.href)
-  , sameScheme: urlUtils.isSchemeEqual(this.url, loc.href)
-  };
-
-  this._ir = new InfoReceiver(this.url, this._urlInfo);
-  this._ir.once('finish', this._receiveInfo.bind(this));
+    this._ir = new InfoReceiver(this.url, this._urlInfo, options);
+    this._ir.once('finish', this._receiveInfo.bind(this));
 }
 
 inherits(SockJS, EventTarget);
 
 function userSetCode(code) {
-  return code === 1000 || (code >= 3000 && code <= 4999);
+    return code === 1000 || (code >= 3000 && code <= 4999);
 }
 
-SockJS.prototype.close = function(code, reason) {
-  // Step 1
-  if (code && !userSetCode(code)) {
-    throw new Error('InvalidAccessError: Invalid code');
-  }
-  // Step 2.4 states the max is 123 bytes, but we are just checking length
-  if (reason && reason.length > 123) {
-    throw new SyntaxError('reason argument has an invalid length');
-  }
+SockJS.prototype.close = function (code, reason) {
+    // Step 1
+    if (code && !userSetCode(code)) {
+        throw new Error('InvalidAccessError: Invalid code');
+    }
+    // Step 2.4 states the max is 123 bytes, but we are just checking length
+    if (reason && reason.length > 123) {
+        throw new SyntaxError('reason argument has an invalid length');
+    }
 
-  // Step 3.1
-  if (this.readyState === SockJS.CLOSING || this.readyState === SockJS.CLOSED) {
-    return;
-  }
+    // Step 3.1
+    if (this.readyState === SockJS.CLOSING || this.readyState === SockJS.CLOSED) {
+        return;
+    }
 
-  // TODO look at docs to determine how to set this
-  var wasClean = true;
-  this._close(code || 1000, reason || 'Normal closure', wasClean);
+    // TODO look at docs to determine how to set this
+    var wasClean = true;
+    this._close(code || 1000, reason || 'Normal closure', wasClean);
 };
 
-SockJS.prototype.send = function(data) {
-  // #13 - convert anything non-string to string
-  // TODO this currently turns objects into [object Object]
-  if (typeof data !== 'string') {
-    data = '' + data;
-  }
-  if (this.readyState === SockJS.CONNECTING) {
-    throw new Error('InvalidStateError: The connection has not been established yet');
-  }
-  if (this.readyState !== SockJS.OPEN) {
-    return;
-  }
-  this._transport.send(escape.quote(data));
+SockJS.prototype.send = function (data) {
+    // #13 - convert anything non-string to string
+    // TODO this currently turns objects into [object Object]
+    if (typeof data !== 'string') {
+        data = '' + data;
+    }
+    if (this.readyState === SockJS.CONNECTING) {
+        throw new Error('InvalidStateError: The connection has not been established yet');
+    }
+    if (this.readyState !== SockJS.OPEN) {
+        return;
+    }
+    this._transport.send(escape.quote(data));
 };
 
 SockJS.version = require('./version');
@@ -779,218 +781,218 @@ SockJS.OPEN = 1;
 SockJS.CLOSING = 2;
 SockJS.CLOSED = 3;
 
-SockJS.prototype._receiveInfo = function(info, rtt) {
-  debug('_receiveInfo', rtt);
-  this._ir = null;
-  if (!info) {
-    this._close(1002, 'Cannot connect to server');
-    return;
-  }
-
-  // establish a round-trip timeout (RTO) based on the
-  // round-trip time (RTT)
-  this._rto = this.countRTO(rtt);
-  // allow server to override url used for the actual transport
-  this._transUrl = info.base_url ? info.base_url : this.url;
-  info = objectUtils.extend(info, this._urlInfo);
-  debug('info', info);
-  // determine list of desired and supported transports
-  var enabledTransports = transports.filterToEnabled(this._transportsWhitelist, info);
-  this._transports = enabledTransports.main;
-  debug(this._transports.length + ' enabled transports');
-
-  this._connect();
-};
-
-SockJS.prototype._connect = function() {
-  for (var Transport = this._transports.shift(); Transport; Transport = this._transports.shift()) {
-    debug('attempt', Transport.transportName);
-    if (Transport.needBody) {
-      if (!global.document.body ||
-          (typeof global.document.readyState !== 'undefined' &&
-            global.document.readyState !== 'complete' &&
-            global.document.readyState !== 'interactive')) {
-        debug('waiting for body');
-        this._transports.unshift(Transport);
-        eventUtils.attachEvent('load', this._connect.bind(this));
+SockJS.prototype._receiveInfo = function (info, rtt) {
+    debug('_receiveInfo', rtt);
+    this._ir = null;
+    if (!info) {
+        this._close(1002, 'Cannot connect to server');
         return;
-      }
     }
 
-    // calculate timeout based on RTO and round trips. Default to 5s
-    var timeoutMs = (this._rto * Transport.roundTrips) || 5000;
-    this._transportTimeoutId = setTimeout(this._transportTimeout.bind(this), timeoutMs);
-    debug('using timeout', timeoutMs);
+    // establish a round-trip timeout (RTO) based on the
+    // round-trip time (RTT)
+    this._rto = this.countRTO(rtt);
+    // allow server to override url used for the actual transport
+    this._transUrl = info.base_url ? info.base_url : this.url;
+    info = objectUtils.extend(info, this._urlInfo);
+    debug('info', info);
+    // determine list of desired and supported transports
+    var enabledTransports = transports.filterToEnabled(this._transportsWhitelist, info);
+    this._transports = enabledTransports.main;
+    debug(this._transports.length + ' enabled transports');
 
-    var transportUrl = urlUtils.addPath(this._transUrl, '/' + this._server + '/' + this._generateSessionId());
-    var options = this._transportOptions[Transport.transportName];
-    debug('transport url', transportUrl);
-    var transportObj = new Transport(transportUrl, this._transUrl, options);
-    transportObj.on('message', this._transportMessage.bind(this));
-    transportObj.once('close', this._transportClose.bind(this));
-    transportObj.transportName = Transport.transportName;
-    this._transport = transportObj;
-
-    return;
-  }
-  this._close(2000, 'All transports failed', false);
+    this._connect();
 };
 
-SockJS.prototype._transportTimeout = function() {
-  debug('_transportTimeout');
-  if (this.readyState === SockJS.CONNECTING) {
-    if (this._transport) {
-      this._transport.close();
+SockJS.prototype._connect = function () {
+    for (var Transport = this._transports.shift(); Transport; Transport = this._transports.shift()) {
+        debug('attempt', Transport.transportName);
+        if (Transport.needBody) {
+            if (!global.document.body ||
+                (typeof global.document.readyState !== 'undefined' &&
+                    global.document.readyState !== 'complete' &&
+                    global.document.readyState !== 'interactive')) {
+                debug('waiting for body');
+                this._transports.unshift(Transport);
+                eventUtils.attachEvent('load', this._connect.bind(this));
+                return;
+            }
+        }
+
+        // calculate timeout based on RTO and round trips. Default to 5s
+        var timeoutMs = (this._rto * Transport.roundTrips) || 5000;
+        this._transportTimeoutId = setTimeout(this._transportTimeout.bind(this), timeoutMs);
+        debug('using timeout', timeoutMs);
+
+        var transportUrl = urlUtils.addPath(this._transUrl, '/' + this._server + '/' + this._generateSessionId());
+        var options = this._transportOptions[Transport.transportName];
+        debug('transport url', transportUrl);
+        var transportObj = new Transport(transportUrl, this._transUrl, options);
+        transportObj.on('message', this._transportMessage.bind(this));
+        transportObj.once('close', this._transportClose.bind(this));
+        transportObj.transportName = Transport.transportName;
+        this._transport = transportObj;
+
+        return;
     }
-
-    this._transportClose(2007, 'Transport timed out');
-  }
+    this._close(2000, 'All transports failed', false);
 };
 
-SockJS.prototype._transportMessage = function(msg) {
-  debug('_transportMessage', msg);
-  var self = this
-    , type = msg.slice(0, 1)
-    , content = msg.slice(1)
-    , payload
+SockJS.prototype._transportTimeout = function () {
+    debug('_transportTimeout');
+    if (this.readyState === SockJS.CONNECTING) {
+        if (this._transport) {
+            this._transport.close();
+        }
+
+        this._transportClose(2007, 'Transport timed out');
+    }
+};
+
+SockJS.prototype._transportMessage = function (msg) {
+    debug('_transportMessage', msg);
+    var self = this
+        , type = msg.slice(0, 1)
+        , content = msg.slice(1)
+        , payload
     ;
 
-  // first check for messages that don't need a payload
-  switch (type) {
+    // first check for messages that don't need a payload
+    switch (type) {
     case 'o':
-      this._open();
-      return;
+        this._open();
+        return;
     case 'h':
-      this.dispatchEvent(new Event('heartbeat'));
-      debug('heartbeat', this.transport);
-      return;
-  }
-
-  if (content) {
-    try {
-      payload = JSON3.parse(content);
-    } catch (e) {
-      debug('bad json', content);
+        this.dispatchEvent(new Event('heartbeat'));
+        debug('heartbeat', this.transport);
+        return;
     }
-  }
 
-  if (typeof payload === 'undefined') {
-    debug('empty payload', content);
-    return;
-  }
+    if (content) {
+        try {
+            payload = JSON3.parse(content);
+        } catch (e) {
+            debug('bad json', content);
+        }
+    }
 
-  switch (type) {
+    if (typeof payload === 'undefined') {
+        debug('empty payload', content);
+        return;
+    }
+
+    switch (type) {
     case 'a':
-      if (Array.isArray(payload)) {
-        payload.forEach(function(p) {
-          debug('message', self.transport, p);
-          self.dispatchEvent(new TransportMessageEvent(p));
-        });
-      }
-      break;
+        if (Array.isArray(payload)) {
+            payload.forEach(function (p) {
+                debug('message', self.transport, p);
+                self.dispatchEvent(new TransportMessageEvent(p));
+            });
+        }
+        break;
     case 'm':
-      debug('message', this.transport, payload);
-      this.dispatchEvent(new TransportMessageEvent(payload));
-      break;
+        debug('message', this.transport, payload);
+        this.dispatchEvent(new TransportMessageEvent(payload));
+        break;
     case 'c':
-      if (Array.isArray(payload) && payload.length === 2) {
-        this._close(payload[0], payload[1], true);
-      }
-      break;
-  }
-};
-
-SockJS.prototype._transportClose = function(code, reason) {
-  debug('_transportClose', this.transport, code, reason);
-  if (this._transport) {
-    this._transport.removeAllListeners();
-    this._transport = null;
-    this.transport = null;
-  }
-
-  if (!userSetCode(code) && code !== 2000 && this.readyState === SockJS.CONNECTING) {
-    this._connect();
-    return;
-  }
-
-  this._close(code, reason);
-};
-
-SockJS.prototype._open = function() {
-  debug('_open', this._transport.transportName, this.readyState);
-  if (this.readyState === SockJS.CONNECTING) {
-    if (this._transportTimeoutId) {
-      clearTimeout(this._transportTimeoutId);
-      this._transportTimeoutId = null;
+        if (Array.isArray(payload) && payload.length === 2) {
+            this._close(payload[0], payload[1], true);
+        }
+        break;
     }
-    this.readyState = SockJS.OPEN;
-    this.transport = this._transport.transportName;
-    this.dispatchEvent(new Event('open'));
-    debug('connected', this.transport);
-  } else {
-    // The server might have been restarted, and lost track of our
-    // connection.
-    this._close(1006, 'Server lost session');
-  }
 };
 
-SockJS.prototype._close = function(code, reason, wasClean) {
-  debug('_close', this.transport, code, reason, wasClean, this.readyState);
-  var forceFail = false;
-
-  if (this._ir) {
-    forceFail = true;
-    this._ir.close();
-    this._ir = null;
-  }
-  if (this._transport) {
-    this._transport.close();
-    this._transport = null;
-    this.transport = null;
-  }
-
-  if (this.readyState === SockJS.CLOSED) {
-    throw new Error('InvalidStateError: SockJS has already been closed');
-  }
-
-  this.readyState = SockJS.CLOSING;
-  setTimeout(function() {
-    this.readyState = SockJS.CLOSED;
-
-    if (forceFail) {
-      this.dispatchEvent(new Event('error'));
+SockJS.prototype._transportClose = function (code, reason) {
+    debug('_transportClose', this.transport, code, reason);
+    if (this._transport) {
+        this._transport.removeAllListeners();
+        this._transport = null;
+        this.transport = null;
     }
 
-    var e = new CloseEvent('close');
-    e.wasClean = wasClean || false;
-    e.code = code || 1000;
-    e.reason = reason;
+    if (!userSetCode(code) && code !== 2000 && this.readyState === SockJS.CONNECTING) {
+        this._connect();
+        return;
+    }
 
-    this.dispatchEvent(e);
-    this.onmessage = this.onclose = this.onerror = null;
-    debug('disconnected');
-  }.bind(this), 0);
+    this._close(code, reason);
+};
+
+SockJS.prototype._open = function () {
+    debug('_open', this._transport.transportName, this.readyState);
+    if (this.readyState === SockJS.CONNECTING) {
+        if (this._transportTimeoutId) {
+            clearTimeout(this._transportTimeoutId);
+            this._transportTimeoutId = null;
+        }
+        this.readyState = SockJS.OPEN;
+        this.transport = this._transport.transportName;
+        this.dispatchEvent(new Event('open'));
+        debug('connected', this.transport);
+    } else {
+        // The server might have been restarted, and lost track of our
+        // connection.
+        this._close(1006, 'Server lost session');
+    }
+};
+
+SockJS.prototype._close = function (code, reason, wasClean) {
+    debug('_close', this.transport, code, reason, wasClean, this.readyState);
+    var forceFail = false;
+
+    if (this._ir) {
+        forceFail = true;
+        this._ir.close();
+        this._ir = null;
+    }
+    if (this._transport) {
+        this._transport.close();
+        this._transport = null;
+        this.transport = null;
+    }
+
+    if (this.readyState === SockJS.CLOSED) {
+        throw new Error('InvalidStateError: SockJS has already been closed');
+    }
+
+    this.readyState = SockJS.CLOSING;
+    setTimeout(function () {
+        this.readyState = SockJS.CLOSED;
+
+        if (forceFail) {
+            this.dispatchEvent(new Event('error'));
+        }
+
+        var e = new CloseEvent('close');
+        e.wasClean = wasClean || false;
+        e.code = code || 1000;
+        e.reason = reason;
+
+        this.dispatchEvent(e);
+        this.onmessage = this.onclose = this.onerror = null;
+        debug('disconnected');
+    }.bind(this), 0);
 };
 
 // See: http://www.erg.abdn.ac.uk/~gerrit/dccp/notes/ccid2/rto_estimator/
 // and RFC 2988.
-SockJS.prototype.countRTO = function(rtt) {
-  // In a local environment, when using IE8/9 and the `jsonp-polling`
-  // transport the time needed to establish a connection (the time that pass
-  // from the opening of the transport to the call of `_dispatchOpen`) is
-  // around 200msec (the lower bound used in the article above) and this
-  // causes spurious timeouts. For this reason we calculate a value slightly
-  // larger than that used in the article.
-  if (rtt > 100) {
-    return 4 * rtt; // rto > 400msec
-  }
-  return 300 + rtt; // 300msec < rto <= 400msec
+SockJS.prototype.countRTO = function (rtt) {
+    // In a local environment, when using IE8/9 and the `jsonp-polling`
+    // transport the time needed to establish a connection (the time that pass
+    // from the opening of the transport to the call of `_dispatchOpen`) is
+    // around 200msec (the lower bound used in the article above) and this
+    // causes spurious timeouts. For this reason we calculate a value slightly
+    // larger than that used in the article.
+    if (rtt > 100) {
+        return 4 * rtt; // rto > 400msec
+    }
+    return 300 + rtt; // 300msec < rto <= 400msec
 };
 
-module.exports = function(availableTransports) {
-  transports = transport(availableTransports);
-  require('./iframe-bootstrap')(SockJS, availableTransports);
-  return SockJS;
+module.exports = function (availableTransports) {
+    transports = transport(availableTransports);
+    require('./iframe-bootstrap')(SockJS, availableTransports);
+    return SockJS;
 };
 
 }).call(this,{ env: {} },typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
@@ -2757,100 +2759,112 @@ module.exports = function(url, payload, callback) {
 'use strict';
 
 var EventEmitter = require('events').EventEmitter
-  , inherits = require('inherits')
-  , eventUtils = require('../../utils/event')
-  , browser = require('../../utils/browser')
-  , urlUtils = require('../../utils/url')
-  ;
+    , inherits = require('inherits')
+    , eventUtils = require('../../utils/event')
+    , browser = require('../../utils/browser')
+    , urlUtils = require('../../utils/url')
+;
 
-var debug = function() {};
+var debug = function () {
+};
 if (process.env.NODE_ENV !== 'production') {
-  debug = require('debug')('sockjs-client:sender:xdr');
+    debug = require('debug')('sockjs-client:sender:xdr');
 }
 
 // References:
 //   http://ajaxian.com/archives/100-line-ajax-wrapper
 //   http://msdn.microsoft.com/en-us/library/cc288060(v=VS.85).aspx
 
-function XDRObject(method, url, payload) {
-  debug(method, url);
-  var self = this;
-  EventEmitter.call(this);
+function XDRObject(method, url, payload, sockJsOptions) {
+    debug(method, url);
+    var self = this;
+    EventEmitter.call(this);
 
-  setTimeout(function() {
-    self._start(method, url, payload);
-  }, 0);
+    setTimeout(function () {
+        self._start(method, url, payload, sockJsOptions);
+    }, 0);
 }
 
 inherits(XDRObject, EventEmitter);
 
-XDRObject.prototype._start = function(method, url, payload) {
-  debug('_start');
-  var self = this;
-  var xdr = new global.XDomainRequest();
-  // IE caches even POSTs
-  url = urlUtils.addQuery(url, 't=' + (+new Date()));
+XDRObject.prototype._start = function (method, url, payload, sockJsOptions) {
+    debug('_start');
+    var self = this;
+    var xdr = new global.XDomainRequest();
+    // IE caches even POSTs
+    url = urlUtils.addQuery(url, 't=' + (+new Date()));
 
-  xdr.onerror = function() {
-    debug('onerror');
-    self._error();
-  };
-  xdr.ontimeout = function() {
-    debug('ontimeout');
-    self._error();
-  };
-  xdr.onprogress = function() {
-    debug('progress', xdr.responseText);
-    self.emit('chunk', 200, xdr.responseText);
-  };
-  xdr.onload = function() {
-    debug('load');
-    self.emit('finish', 200, xdr.responseText);
-    self._cleanup(false);
-  };
-  this.xdr = xdr;
-  this.unloadRef = eventUtils.unloadAdd(function() {
-    self._cleanup(true);
-  });
-  try {
-    // Fails with AccessDenied if port number is bogus
-    this.xdr.open(method, url);
-    if (this.timeout) {
-      this.xdr.timeout = this.timeout;
-    }
-    this.xdr.send(payload);
-  } catch (x) {
-    this._error();
-  }
-};
-
-XDRObject.prototype._error = function() {
-  this.emit('finish', 0, '');
-  this._cleanup(false);
-};
-
-XDRObject.prototype._cleanup = function(abort) {
-  debug('cleanup', abort);
-  if (!this.xdr) {
-    return;
-  }
-  this.removeAllListeners();
-  eventUtils.unloadDel(this.unloadRef);
-
-  this.xdr.ontimeout = this.xdr.onerror = this.xdr.onprogress = this.xdr.onload = null;
-  if (abort) {
+    xdr.onerror = function () {
+        debug('onerror');
+        self._error();
+    };
+    xdr.ontimeout = function () {
+        debug('ontimeout');
+        self._error();
+    };
+    xdr.onprogress = function () {
+        debug('progress', xdr.responseText);
+        self.emit('chunk', 200, xdr.responseText);
+    };
+    xdr.onload = function () {
+        debug('load');
+        self.emit('finish', 200, xdr.responseText);
+        self._cleanup(false);
+    };
+    this.xdr = xdr;
+    this.unloadRef = eventUtils.unloadAdd(function () {
+        self._cleanup(true);
+    });
     try {
-      this.xdr.abort();
+        // Fails with AccessDenied if port number is bogus
+        this.xdr.open(method, url);
+        this.xdr._setHeader(sockJsOptions.headers);
+        if (this.timeout) {
+            this.xdr.timeout = this.timeout;
+        }
+        this.xdr.send(payload);
     } catch (x) {
-      // intentionally empty
+        this._error();
     }
-  }
-  this.unloadRef = this.xdr = null;
 };
 
-XDRObject.prototype.close = function() {
-  debug('close');
-  this._cleanup(true);
+XDRObject.prototype._setHeader = function (headers) {
+    if (headers) {
+        for (var i in headers) {
+            if (headers.hasOwnProperty(i)) {
+                this.xdr.setRequestHeader(i, headers[i]);
+            }
+        }
+    }
+};
+
+XDRObject.prototype._error = function () {
+    this.emit('finish', 0, '');
+    this._cleanup(false);
+};
+
+XDRObject.prototype._cleanup = function (abort) {
+    debug('cleanup', abort);
+    if (!this.xdr) {
+        return;
+    }
+    this.removeAllListeners();
+    eventUtils.unloadDel(this.unloadRef);
+
+    this.xdr.ontimeout = this.xdr.onerror = this.xdr.onprogress = this.xdr.onload = null;
+    if (abort) {
+        try {
+            this.xdr.abort();
+        } catch (x) {
+            // intentionally empty
+        }
+    }
+    this.unloadRef = this.xdr = null;
+};
+
+XDRObject.prototype.close = function () {
+    debug('close');
+    this._cleanup(true);
 };
 
 // IE 8/9 if the request target uses the same scheme - #79
@@ -2907,13 +2921,15 @@ module.exports = XHRFake;
 'use strict';
 
 var inherits = require('inherits')
-  , XhrDriver = require('../driver/xhr')
-  ;
+    , XhrDriver = require('../driver/xhr')
+;
 
-function XHRLocalObject(method, url, payload /*, opts */) {
-  XhrDriver.call(this, method, url, payload, {
-    noCredentials: true
-  });
+function XHRLocalObject(method, url, payload, opts) {
+    if (!opts) {
+        opts = {};
+    }
+    opts.noCredentials = true;
+    XhrDriver.call(this, method, url, payload, opts);
 }
 
 inherits(XHRLocalObject, XhrDriver);
@@ -3729,7 +3745,7 @@ module.exports = {
 }).call(this,{ env: {} })
 
 },{"debug":54,"url-parse":61}],53:[function(require,module,exports){
-module.exports = '1.1.5';
+module.exports = '1.1.6';
 
 },{}],54:[function(require,module,exports){
 (function (process){
@@ -5352,6 +5368,9 @@ var required = require('requires-port')
 var rules = [
   ['#', 'hash'],                        // Extract from the back.
   ['?', 'query'],                       // Extract from the back.
+  function sanitize(address) {          // Sanitize what is left of the address
+    return address.replace('\\', '/');
+  },
   ['/', 'pathname'],                    // Extract from the back.
   ['@', 'auth', 1],                     // Extract from the front.
   [NaN, 'host', undefined, 1, 1],       // Set left over value.
@@ -5379,19 +5398,20 @@ var ignore = { hash: 1, query: 1 };
  *
  * @param {Object|String} loc Optional default location object.
  * @returns {Object} lolcation object.
- * @api public
+ * @public
  */
 function lolcation(loc) {
-  loc = loc || global.location || {};
+  var location = global && global.location || {};
+  loc = loc || location;
 
   var finaldestination = {}
     , type = typeof loc
     , key;
 
   if ('blob:' === loc.protocol) {
-    finaldestination = new URL(unescape(loc.pathname), {});
+    finaldestination = new Url(unescape(loc.pathname), {});
   } else if ('string' === type) {
-    finaldestination = new URL(loc, {});
+    finaldestination = new Url(loc, {});
     for (key in ignore) delete finaldestination[key];
   } else if ('object' === type) {
     for (key in loc) {
@@ -5420,7 +5440,7 @@ function lolcation(loc) {
  *
  * @param {String} address URL we want to extract from.
  * @return {ProtocolExtract} Extracted information.
- * @api private
+ * @private
  */
 function extractProtocol(address) {
   var match = protocolre.exec(address);
@@ -5438,7 +5458,7 @@ function extractProtocol(address) {
  * @param {String} relative Pathname of the relative URL.
  * @param {String} base Pathname of the base URL.
  * @return {String} Resolved pathname.
- * @api private
+ * @private
  */
 function resolve(relative, base) {
   var path = (base || '/').split('/').slice(0, -1).concat(relative.split('/'))
@@ -5471,15 +5491,18 @@ function resolve(relative, base) {
  * create an actual constructor as it's much more memory efficient and
  * faster and it pleases my OCD.
  *
+ * It is worth noting that we should not use `URL` as class name to prevent
+ * clashes with the global URL instance that got introduced in browsers.
+ *
  * @constructor
  * @param {String} address URL we want to parse.
  * @param {Object|String} location Location defaults for relative paths.
  * @param {Boolean|Function} parser Parser for the query string.
- * @api public
+ * @private
  */
-function URL(address, location, parser) {
-  if (!(this instanceof URL)) {
-    return new URL(address, location, parser);
+function Url(address, location, parser) {
+  if (!(this instanceof Url)) {
+    return new Url(address, location, parser);
   }
 
   var relative, extracted, parse, instruction, index, key
@@ -5521,10 +5544,16 @@ function URL(address, location, parser) {
   // When the authority component is absent the URL starts with a path
   // component.
   //
-  if (!extracted.slashes) instructions[2] = [/(.*)/, 'pathname'];
+  if (!extracted.slashes) instructions[3] = [/(.*)/, 'pathname'];
 
   for (; i < instructions.length; i++) {
     instruction = instructions[i];
+
+    if (typeof instruction === 'function') {
+      address = instruction(address);
+      continue;
+    }
+
     parse = instruction[0];
     key = instruction[1];
 
@@ -5615,8 +5644,8 @@ function URL(address, location, parser) {
  *                               used to parse the query.
  *                               When setting the protocol, double slash will be
  *                               removed from the final url if it is true.
- * @returns {URL}
- * @api public
+ * @returns {URL} URL instance for chaining.
+ * @public
  */
 function set(part, value, fn) {
   var url = this;
@@ -5701,8 +5730,8 @@ function set(part, value, fn) {
  * Transform the properties back in to a valid and full URL string.
  *
  * @param {Function} stringify Optional query stringify function.
- * @returns {String}
- * @api public
+ * @returns {String} Compiled version of the URL.
+ * @public
  */
 function toString(stringify) {
   if (!stringify || 'function' !== typeof stringify) stringify = qs.stringify;
@@ -5731,17 +5760,17 @@ function toString(stringify) {
   return result;
 }
 
-URL.prototype = { set: set, toString: toString };
+Url.prototype = { set: set, toString: toString };
 
 //
 // Expose the URL parser and some additional properties that might be useful for
 // others or testing.
 //
-URL.extractProtocol = extractProtocol;
-URL.location = lolcation;
-URL.qs = qs;
+Url.extractProtocol = extractProtocol;
+Url.location = lolcation;
+Url.qs = qs;
 
-module.exports = URL;
+module.exports = Url;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
